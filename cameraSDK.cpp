@@ -16,52 +16,14 @@
  #include <opencv2/imgcodecs.hpp>
  #include <opencv2/highgui.hpp>
  */
-
+ #define SERVER_IP "192.168.50.80"
+ #define SERVER_PORT 8080  
  
  
  std::mutex mutex;
  rs2::frameset fs_frame = {};
  double fs_timestamp = 0.0;
  bool fs_flag = false;
- 
-
- void sendData(const std::vector<uint8_t>& data, const std::string& target_ip) {
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock == -1) {
-        std::cerr << "無法創建 socket" << std::endl;
-        return;
-    }
-
-    struct sockaddr_in serverAddr;
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(PORT);
-    // 設定目標裝置的 IP 地址
-    if (inet_pton(AF_INET, target_ip.c_str(), &serverAddr.sin_addr) <= 0) {
-        std::cerr << "無效的目標 IP 地址" << std::endl;
-        close(sock);
-        return;
-    }
-
-    if (connect(sock, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
-        std::cerr << "無法連線到目標裝置" << std::endl;
-        close(sock);
-        return;
-    }
-
-    size_t bytesSent = 0;
-    while (bytesSent < data.size()) {
-        size_t chunkSize = std::min(BUFFER_SIZE, data.size() - bytesSent);
-        ssize_t sent = send(sock, data.data() + bytesSent, chunkSize, 0);
-        if (sent < 0) {
-            std::cerr << "傳輸錯誤" << std::endl;
-            break;
-        }
-        bytesSent += sent;
-    }
-
-    close(sock);
-}
-
  
  
  void stream_callback(const rs2::frame& frame){ 
@@ -274,8 +236,29 @@
          }
      }
  }
- 
- 
+
+ void send_frame(int sockfd, const void *data, int data_size, const struct sockaddr_in &addr) {
+    int sent_bytes = sendto(sockfd, data, data_size, 0, (const struct sockaddr *)&addr, sizeof(addr));
+    if (sent_bytes == -1) {
+        std::cerr << "Failed to send image data!" << std::endl;
+    }
+}
+
+ int setup_socket() {
+    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd == -1) {
+        std::cerr << "Socket creation failed!" << std::endl;
+        exit(1);
+    }
+
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(SERVER_PORT);
+    server_addr.sin_addr.s_addr = inet_addr(SERVER_IP);
+
+    return sockfd;
+}
+
  
  int main()
  {    
@@ -310,17 +293,17 @@
      rs2::config cfg;
  
      // Depth stream
-     cfg.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, 60);
+    //  cfg.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, 15);
      // IR_left stream
-     cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 60);
+    //  cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 15);
      // IR_right stream
-     cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 60);
+    //  cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 15);
      // RGB stream
-     cfg.enable_stream(RS2_STREAM_COLOR, 848, 480, RS2_FORMAT_BGR8, 60);
+     cfg.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_BGR8, 15);
      // IMU GYRO stream
-     cfg.enable_stream(RS2_STREAM_GYRO , RS2_FORMAT_MOTION_XYZ32F, 400);
+    //  cfg.enable_stream(RS2_STREAM_GYRO , RS2_FORMAT_MOTION_XYZ32F, 100);
      // IMU ACCEL stream
-     cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 200);
+    //  cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 100);
  
      rs2::pipeline_profile pipe_profile = pipe.start(cfg, stream_callback);
  
@@ -333,7 +316,10 @@
      temp_filter.set_option(rs2_option::RS2_OPTION_HOLES_FILL, 6);
      temp_filter.set_option(rs2_option::RS2_OPTION_FILTER_SMOOTH_ALPHA, 0.4f);
      temp_filter.set_option(rs2_option::RS2_OPTION_FILTER_SMOOTH_DELTA, 20);
- 
+    
+
+     int sockfd = setup_socket();
+
      double _timestamp_last = 0.0;
      while (true){
          rs2::frameset _frame = {};
@@ -350,14 +336,19 @@
              printf("_frame fps:  %.4f \n", 1/(_timestamp - _timestamp_last));
  
              // Obtain data for each image
-             rs2::depth_frame depth_frame = _frame.get_depth_frame();
+            //  rs2::depth_frame depth_frame = _frame.get_depth_frame();
              rs2::video_frame color_frame = _frame.get_color_frame();
+             /*
              rs2::frame irL_frame = _frame.get_infrared_frame(1);
              rs2::frame irR_frame = _frame.get_infrared_frame(2);
  
  
              rs2::depth_frame depth_frame_filtered = temp_filter.process(depth_frame);
- 
+             */
+             send_frame(sockfd, color_frame.get_data(), color_frame.get_data_size());
+            //  send_frame(sockfd, depth_frame.get_data(), depth_frame.get_data_size());
+             
+            /*
              // Convert image data to OpenCV format
              cv::Mat depth_image(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP); // Depth
              cv::Mat color_image(cv::Size(848, 480), CV_8UC3, (void*)color_frame.get_data(), cv::Mat::AUTO_STEP); // RGB
@@ -377,12 +368,12 @@
              cv::imshow("irR", irR_image);
              cv::imshow("p_depth", depth_image);
              cv::waitKey(1);
- 
+            */
              _timestamp_last = _timestamp;
          }else{
              usleep(2000);
          }
- 
+         close(sockfd);
      }
      return 0;
  }
