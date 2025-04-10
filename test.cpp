@@ -278,7 +278,7 @@ int main()
     // Options: 640x360: @ 30 Hz    
 
     // RGB stream
-    cfg.enable_stream(RS2_STREAM_COLOR, 848, 480, RS2_FORMAT_BGR8, 15);
+    cfg.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_BGR8, 15);
     // Options:  640x480: @ 30 15 10 Hz
     // Options: 1280x720: @ 15 10 6  Hz    
 
@@ -320,15 +320,26 @@ int main()
             // Obtain data for each image
             rs2::depth_frame depth_frame = _frame.get_depth_frame();
             rs2::video_frame color_frame = _frame.get_color_frame();
+            /*
             rs2::frame irL_frame = _frame.get_infrared_frame(1);
             rs2::frame irR_frame = _frame.get_infrared_frame(2);
-
+            */
 
             rs2::depth_frame depth_frame_filtered = temp_filter.process(depth_frame);
 
             // Convert image data to OpenCV format
             cv::Mat depth_image(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP); // Depth
-            cv::Mat color_image(cv::Size(848, 480), CV_8UC3, (void*)color_frame.get_data(), cv::Mat::AUTO_STEP); // RGB
+            // Normalize depth image to the range 0-255 for display
+            cv::Mat depth_image_normalized;
+            cv::normalize(depth_image, depth_image_normalized, 0, 255, cv::NORM_MINMAX);
+
+            // Convert to 8-bit for OpenCV to display
+            cv::Mat depth_image_8bit;
+            depth_image_normalized.convertTo(depth_image_8bit, CV_8UC1);
+
+
+
+            cv::Mat color_image(cv::Size(640, 480), CV_8UC3, (void*)color_frame.get_data(), cv::Mat::AUTO_STEP); // RGB
             /*
             cv::Mat irL_image  (cv::Size(640, 480), CV_8UC1, (void*)irL_frame.get_data()  , cv::Mat::AUTO_STEP); // IR_left
             cv::Mat irR_image  (cv::Size(640, 480), CV_8UC1, (void*)irR_frame.get_data()  , cv::Mat::AUTO_STEP); // IR_right
@@ -336,12 +347,16 @@ int main()
             cv::Mat p_depth_image(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP); // post processed Depth
             */
             // show pictures
-            if (color_image.empty() || depth_image.empty() || irL_image.empty() || irR_image.empty()) {
+            if (color_image.empty() || depth_image.empty()) {
                 std::cerr << "One or more images are empty." << std::endl;
                 continue;
             }
             cv::imshow("depth", depth_image);
             cv::imshow("color", color_image);
+
+            // Show the depth image
+            cv::imshow("depth_normed", depth_image_8bit);
+
             /*
             cv::imshow("irL", irL_image);
             cv::imshow("irR", irR_image);
