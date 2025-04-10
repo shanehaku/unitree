@@ -266,17 +266,29 @@ int main()
     rs2::config cfg;
 
     // Depth stream
-    cfg.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, 60);
+    cfg.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, 15);
+    // Options: 640x480: @ 30 15 6 Hz
+    // Options: 640x360: @ 30 Hz  
+
     // IR_left stream
-    cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 60);
+    cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 15);
     // IR_right stream
-    cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 60);
+    cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 15);
+    // Options: 640x480: @ 30 15 6 Hz
+    // Options: 640x360: @ 30 Hz    
+
     // RGB stream
-    cfg.enable_stream(RS2_STREAM_COLOR, 848, 480, RS2_FORMAT_BGR8, 60);
+    cfg.enable_stream(RS2_STREAM_COLOR, 848, 480, RS2_FORMAT_BGR8, 15);
+    // Options:  640x480: @ 30 15 10 Hz
+    // Options: 1280x720: @ 15 10 6  Hz    
+
     // IMU GYRO stream
-    cfg.enable_stream(RS2_STREAM_GYRO , RS2_FORMAT_MOTION_XYZ32F, 400);
+    cfg.enable_stream(RS2_STREAM_GYRO , RS2_FORMAT_MOTION_XYZ32F, 200);
+    // Options: 400 200 Hz
+
     // IMU ACCEL stream
     cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 200);
+    // Options: 200 100 Hz
 
     rs2::pipeline_profile pipe_profile = pipe.start(cfg, stream_callback);
 
