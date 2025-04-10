@@ -317,11 +317,12 @@ int main()
             // Convert image data to OpenCV format
             cv::Mat depth_image(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP); // Depth
             cv::Mat color_image(cv::Size(848, 480), CV_8UC3, (void*)color_frame.get_data(), cv::Mat::AUTO_STEP); // RGB
+            /*
             cv::Mat irL_image  (cv::Size(640, 480), CV_8UC1, (void*)irL_frame.get_data()  , cv::Mat::AUTO_STEP); // IR_left
             cv::Mat irR_image  (cv::Size(640, 480), CV_8UC1, (void*)irR_frame.get_data()  , cv::Mat::AUTO_STEP); // IR_right
 
             cv::Mat p_depth_image(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP); // post processed Depth
-
+            */
             // show pictures
             if (color_image.empty() || depth_image.empty() || irL_image.empty() || irR_image.empty()) {
                 std::cerr << "One or more images are empty." << std::endl;
@@ -329,10 +330,12 @@ int main()
             }
             cv::imshow("depth", depth_image);
             cv::imshow("color", color_image);
+            /*
             cv::imshow("irL", irL_image);
             cv::imshow("irR", irR_image);
             cv::imshow("p_depth", depth_image);
-            cv::waitKey(1);
+            */
+            cv::waitKey(10);
 
             _timestamp_last = _timestamp;
         }else{
