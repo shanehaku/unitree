@@ -377,11 +377,11 @@ int main()
 
         cv::Mat image;
         if(_flag){
-            rs2::video_frame color_frame = _frame.get_depth_frame();
-            rs2::depth_frame depth_frame = _frame.get_color_frame();
-            rs2::depth_frame depth_frame_filtered = _frame.get_infrared_frame(1);
-            rs2::frame irL_frame = _frame.get_infrared_frame(2);
-            rs2::frame irR_frame = temp_filter.process(depth_frame);
+            rs2::video_frame color_frame = _frame.get_color_frame();
+            rs2::depth_frame depth_frame = _frame.get_depth_frame();
+            rs2::depth_frame depth_frame_filtered = temp_filter.process(depth_frame);
+            rs2::frame irL_frame = _frame.get_infrared_frame(1);
+            rs2::frame irR_frame = _frame.get_infrared_frame(2);
 
             
             for (size_t i = 0; i < stream_servers.size(); ++i) {
