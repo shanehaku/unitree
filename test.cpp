@@ -372,13 +372,14 @@ int main()
         _flag = fs_flag;
         fs_flag = false;
         lock.unlock();
-
         if(_flag){
-            rs2::video_frame color_frame;
-            rs2::depth_frame depth_frame;
-            rs2::frame irL_frame, irR_frame;
-            rs2::frame depth_frame_filtered;
-            rs2::depth_frame depth_frame_filtered
+            if (enable_color_stream) rs2::depth_frame depth_frame = _frame.get_depth_frame();
+            if (enable_depth_stream) rs2::video_frame color_frame = _frame.get_color_frame();
+            if (enable_ir_left_stream) rs2::frame irL_frame = _frame.get_infrared_frame(1);
+            if (enable_ir_right_stream) rs2::frame irR_frame = _frame.get_infrared_frame(2);
+            if (enable_post_depth_stream) rs2::depth_frame depth_frame_filtered = temp_filter.process(depth_frame);
+
+            
             for (size_t i = 0; i < stream_servers.size(); ++i) {
                 auto& server = stream_servers[i];
                 if (!server.enable_sending) continue;
@@ -387,28 +388,22 @@ int main()
                 switch (server.port) {
                     case COLOR_PORT:
                         if (!enable_color_stream) continue;
-                        color_frame = _frame.get_color_frame();
                         image = cv::Mat(cv::Size(640, 480), CV_8UC3, (void*)color_frame.get_data(), cv::Mat::AUTO_STEP);
                         break;
                     case DEPTH_PORT:
                         if (!enable_depth_stream) continue;
-                        depth_frame = _frame.get_depth_frame();
                         image = cv::Mat(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP);
                         break;
                     case IRL_PORT:
                         if (!enable_ir_left_stream) continue;
-                        irL_frame = _frame.get_infrared_frame(1);
                         image = cv::Mat(cv::Size(640, 480), CV_8UC1, (void*)irL_frame.get_data()  , cv::Mat::AUTO_STEP);
                         break;
                     case IRR_PORT:
                         if (!enable_ir_right_stream) continue;
-                        irR_frame = _frame.get_infrared_frame(2);
                         image = cv::Mat(cv::Size(640, 480), CV_8UC1, (void*)irR_frame.get_data()  , cv::Mat::AUTO_STEP);
                         break;
                     case PDEPTH_PORT:
                         if (!enable_post_depth_stream) continue;
-                        depth_frame = _frame.get_depth_frame();
-                        depth_frame_filtered = temp_filter.process(depth_frame);
                         image = cv::Mat(cv::Size(640, 480), CV_16U , (void*)depth_frame_filtered.get_data(), cv::Mat::AUTO_STEP);
                         break;
                 }
