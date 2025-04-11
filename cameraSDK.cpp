@@ -269,6 +269,12 @@ int main()
 	cfg.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, 15);
 	// Options: 640x480: @ 30 15 6 Hz
 	// Options: 640x360: @ 30 Hz  
+
+    // RGB stream
+	cfg.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_BGR8, 15);
+	// Options:  640x480: @ 30 15 10 Hz
+	// Options: 1280x720: @ 15 10 6  Hz  
+
 /*
 	// IR_left stream
 	cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 15);
@@ -276,12 +282,7 @@ int main()
 	cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 15);
 	// Options: 640x480: @ 30 15 6 Hz
 	// Options: 640x360: @ 30 Hz    
-*/
-	// RGB stream
-	cfg.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_BGR8, 15);
-	// Options:  640x480: @ 30 15 10 Hz
-	// Options: 1280x720: @ 15 10 6  Hz    
-/*
+    
 	// IMU GYRO stream
 	cfg.enable_stream(RS2_STREAM_GYRO , RS2_FORMAT_MOTION_XYZ32F, 200);
 	// Options: 400 200 Hz
@@ -315,7 +316,7 @@ int main()
     	_flag = fs_flag;
     	fs_flag = false;
     	lock.unlock();
-    
+        int key;
     	if(_flag){
         	printf("_frame fps:  %.4f \n", 1/(_timestamp - _timestamp_last));
     	 
@@ -357,11 +358,12 @@ int main()
         	usleep(2000);
         	//printf("frame stuck\n");
     	}
-        
+
         key = cv::waitKey(1);
         if (key == 'q' || key == 'Q') {
             break;
         }
 	}
+    pipe.stop();
 	return 0;
 }
