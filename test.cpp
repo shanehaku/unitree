@@ -319,19 +319,19 @@ int main()
     rs2::config cfg;
 
     // Depth stream
-    if (enable_depth_stream || enable_post_depth_stream) cfg.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, 15);
+    cfg.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, 15);
     // Options: 640x480: @ 30 15 6 Hz
     // Options: 640x360: @ 30 Hz  
 
     // IR_left stream
-    if (enable_ir_left_stream) cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 15);
+    cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 15);
     // IR_right stream
-    if (enable_ir_right_stream)cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 15);
+    cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 15);
     // Options: 640x480: @ 30 15 6 Hz
     // Options: 640x360: @ 30 Hz    
 
     // RGB stream
-    if (enable_color_stream)cfg.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_BGR8, 15);
+    cfg.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_BGR8, 15);
     // Options:  640x480: @ 30 15 10 Hz
     // Options: 1280x720: @ 15 10 6  Hz    
 
@@ -363,11 +363,6 @@ int main()
 ///
 
     int key;
-    rs2::video_frame color_frame = {};
-    rs2::depth_frame depth_frame = {};
-    rs2::depth_frame depth_frame_filtered = {};
-    rs2::frame irL_frame = {};
-    rs2::frame irR_frame = {};
 
     while (true){
         rs2::frameset _frame = {};
@@ -379,19 +374,21 @@ int main()
         _flag = fs_flag;
         fs_flag = false;
         lock.unlock();
+
+        cv::Mat image;
         if(_flag){
-            if (enable_color_stream) depth_frame = _frame.get_depth_frame();
-            if (enable_depth_stream) color_frame = _frame.get_color_frame();
-            if (enable_ir_left_stream) irL_frame = _frame.get_infrared_frame(1);
-            if (enable_ir_right_stream) irR_frame = _frame.get_infrared_frame(2);
-            if (enable_post_depth_stream) depth_frame_filtered = temp_filter.process(depth_frame);
+            rs2::video_frame color_frame = _frame.get_depth_frame();
+            rs2::depth_frame depth_frame = _frame.get_color_frame();
+            rs2::depth_frame depth_frame_filtered = _frame.get_infrared_frame(1);
+            rs2::frame irL_frame = _frame.get_infrared_frame(2);
+            rs2::frame irR_frame = temp_filter.process(depth_frame);
 
             
             for (size_t i = 0; i < stream_servers.size(); ++i) {
                 auto& server = stream_servers[i];
                 if (!server.enable_sending) continue;
             
-                cv::Mat image;
+                
                 switch (server.port) {
                     case COLOR_PORT:
                         if (!enable_color_stream) continue;
