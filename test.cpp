@@ -361,7 +361,14 @@ int main()
         std::thread(wait_for_client, std::ref(server)).detach();
     }
 ///
+
     int key;
+    rs2::video_frame color_frame;
+    rs2::depth_frame depth_frame;
+    rs2::depth_frame depth_frame_filtered;
+    rs2::frame irL_frame;
+    rs2::frame irR_frame;
+
     while (true){
         rs2::frameset _frame = {};
         double _timestamp = 0.0;
@@ -373,11 +380,11 @@ int main()
         fs_flag = false;
         lock.unlock();
         if(_flag){
-            if (enable_color_stream) rs2::depth_frame depth_frame = _frame.get_depth_frame();
-            if (enable_depth_stream) rs2::video_frame color_frame = _frame.get_color_frame();
-            if (enable_ir_left_stream) rs2::frame irL_frame = _frame.get_infrared_frame(1);
-            if (enable_ir_right_stream) rs2::frame irR_frame = _frame.get_infrared_frame(2);
-            if (enable_post_depth_stream) rs2::depth_frame depth_frame_filtered = temp_filter.process(depth_frame);
+            if (enable_color_stream) depth_frame = _frame.get_depth_frame();
+            if (enable_depth_stream) color_frame = _frame.get_color_frame();
+            if (enable_ir_left_stream) irL_frame = _frame.get_infrared_frame(1);
+            if (enable_ir_right_stream) irR_frame = _frame.get_infrared_frame(2);
+            if (enable_post_depth_stream) depth_frame_filtered = temp_filter.process(depth_frame);
 
             
             for (size_t i = 0; i < stream_servers.size(); ++i) {
