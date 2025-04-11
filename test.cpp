@@ -5,12 +5,21 @@
 
 #include <mutex>
 #include <thread>
+
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
+
+#define COLOR_PORT      9001
+#define DEPTH_PORT      9002
+#define IRL_PORT        9003
+#define IRR_PORT        9004
+#define PDEPTH_PORT     9005
 
 std::mutex mutex;
 rs2::frameset fs_frame = {};
@@ -232,17 +241,13 @@ void l_get_intrinsics(const rs2::stream_profile& stream, float &_fx, float &_fy,
     }
 }
 
-#define COLOR_PORT      9001
-#define DEPTH_PORT      9002
-#define IRL_PORT        9003
-#define IRR_PORT        9004
-#define PDEPTH_PORT     9005
+
 
 bool enable_color_stream = true;
 bool enable_depth_stream = true;
-bool enable_ir_left_stream = true;
-bool enable_ir_right_stream = true;
-bool enable_post_depth_stream = true;
+bool enable_ir_left_stream = false;
+bool enable_ir_right_stream = false;
+bool enable_post_depth_stream = false;
 
 struct StreamServer {
     int port;
@@ -308,22 +313,6 @@ int main()
         get_sensor_option(sensor);
     }
 
-    /*
-    // Set sensor parameters
-    for (rs2::sensor sensor : sensors){
-        std::string sensor_name = sensor.get_info(RS2_CAMERA_INFO_NAME);
-        if(sensor_name == "Stereo Module"){ // Depth camera
-            change_sensor_option(sensor, RS2_OPTION_VISUAL_PRESET, rs2_rs400_visual_preset::RS2_RS400_VISUAL_PRESET_HIGH_ACCURACY);
-            change_sensor_option(sensor, RS2_OPTION_ENABLE_AUTO_EXPOSURE, 1);
-            change_sensor_option(sensor, RS2_OPTION_EMITTER_ENABLED, 1);
-            change_sensor_option(sensor, RS2_OPTION_LASER_POWER, 150);
-        }else if(sensor_name == "RGB Module"){
-            change_sensor_option(sensor, RS2_OPTION_ENABLE_AUTO_EXPOSURE, 1);
-        }else if(sensor_name == "Motion Module"){
-            // ...
-        }
-    }
-    */
 
     // Instantiate pipeline and config
     rs2::pipeline pipe;
@@ -345,15 +334,7 @@ int main()
     if (enable_color_stream)cfg.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_BGR8, 15);
     // Options:  640x480: @ 30 15 10 Hz
     // Options: 1280x720: @ 15 10 6  Hz    
-/*
-    // IMU GYRO stream
-    cfg.enable_stream(RS2_STREAM_GYRO , RS2_FORMAT_MOTION_XYZ32F, 200);
-    // Options: 400 200 Hz
 
-    // IMU ACCEL stream
-    cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 200);
-    // Options: 200 100 Hz
-*/
     rs2::pipeline_profile pipe_profile = pipe.start(cfg, stream_callback);
 
     // get Depth(IR_left) intrinsics
@@ -380,6 +361,7 @@ int main()
         std::thread(wait_for_client, std::ref(server)).detach();
     }
 ///
+    int key;
     while (true){
         rs2::frameset _frame = {};
         double _timestamp = 0.0;
@@ -392,6 +374,11 @@ int main()
         lock.unlock();
 
         if(_flag){
+            rs2::video_frame color_frame;
+            rs2::depth_frame depth_frame;
+            rs2::frame irL_frame, irR_frame;
+            rs2::frame depth_frame_filtered;
+            rs2::depth_frame depth_frame_filtered
             for (size_t i = 0; i < stream_servers.size(); ++i) {
                 auto& server = stream_servers[i];
                 if (!server.enable_sending) continue;
@@ -400,29 +387,29 @@ int main()
                 switch (server.port) {
                     case COLOR_PORT:
                         if (!enable_color_stream) continue;
-                        rs2::video_frame color_frame = _frame.get_color_frame();
-                        image = cv::Mat color_image(cv::Size(640, 480), CV_8UC3, (void*)color_frame.get_data(), cv::Mat::AUTO_STEP);
+                        color_frame = _frame.get_color_frame();
+                        image = cv::Mat(cv::Size(640, 480), CV_8UC3, (void*)color_frame.get_data(), cv::Mat::AUTO_STEP);
                         break;
                     case DEPTH_PORT:
                         if (!enable_depth_stream) continue;
-                        rs2::depth_frame depth_frame = _frame.get_depth_frame();
-                        image = cv::Mat depth_image(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP);
+                        depth_frame = _frame.get_depth_frame();
+                        image = cv::Mat(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP);
                         break;
                     case IRL_PORT:
                         if (!enable_ir_left_stream) continue;
-                        rs2::frame irL_frame = _frame.get_infrared_frame(1);
-                        image = cv::Mat irL_image  (cv::Size(640, 480), CV_8UC1, (void*)irL_frame.get_data()  , cv::Mat::AUTO_STEP);
+                        irL_frame = _frame.get_infrared_frame(1);
+                        image = cv::Mat(cv::Size(640, 480), CV_8UC1, (void*)irL_frame.get_data()  , cv::Mat::AUTO_STEP);
                         break;
                     case IRR_PORT:
                         if (!enable_ir_right_stream) continue;
-                        rs2::frame irR_frame = _frame.get_infrared_frame(2);
-                        image = cv::Mat irL_image  (cv::Size(640, 480), CV_8UC1, (void*)irR_frame.get_data()  , cv::Mat::AUTO_STEP);
+                        irR_frame = _frame.get_infrared_frame(2);
+                        image = cv::Mat(cv::Size(640, 480), CV_8UC1, (void*)irR_frame.get_data()  , cv::Mat::AUTO_STEP);
                         break;
                     case PDEPTH_PORT:
                         if (!enable_post_depth_stream) continue;
-                        rs2::depth_frame depth_frameF = _frame.get_depth_frame();
-                        rs2::depth_frame depth_frame_filtered = temp_filter.process(depth_frameF);
-                        image = cv::Mat p_depth_image(cv::Size(640, 480), CV_16U , (void*)depth_frame_filtered.get_data(), cv::Mat::AUTO_STEP);
+                        depth_frame = _frame.get_depth_frame();
+                        depth_frame_filtered = temp_filter.process(depth_frame);
+                        image = cv::Mat(cv::Size(640, 480), CV_16U , (void*)depth_frame_filtered.get_data(), cv::Mat::AUTO_STEP);
                         break;
                 }
                 if (!image.empty()) {
