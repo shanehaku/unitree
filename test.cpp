@@ -5,6 +5,7 @@
 
 #include <mutex>
 #include <thread>
+#include <sys/socket.h>
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
