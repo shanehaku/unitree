@@ -1,45 +1,48 @@
 import socket
+import struct
 import numpy as np
 import cv2
 
-# Set up the UDP socket to receive data
+
+def receive_image(conn):
+    # Step 1: 先讀取資料大小（int, 4 bytes）
+    data_size = conn.recv(4)
+    if not data_size:
+        return None
+    size = struct.unpack('!I', data_size)[0]
+
+    # Step 2: 接收影像資料
+    data = b''
+    while len(data) < size:
+        packet = conn.recv(size - len(data))
+        if not packet:
+            return None
+        data += packet
+
+    # Step 3: 轉成 numpy array 並解碼
+    image_np = np.frombuffer(data, dtype=np.uint8)
+    image = cv2.imdecode(image_np, cv2.IMREAD_UNCHANGED)
+    return image
 
 
+def run_receiver(port, window_name="image"):
+    HOST = '0.0.0.0'  # 接收所有 IP
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((HOST, port))
+        s.listen(1)
+        print(f"[INFO] Listening on port {port} ...")
+        conn, addr = s.accept()
+        print(f"[INFO] Connection from {addr}")
 
+        with conn:
+            while True:
+                image = receive_image(conn)
+                if image is None:
+                    print("[INFO] No image received, connection might be closed.")
+                    break
 
-
-def setup_udp_socket(port):
-    sockfd = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sockfd.bind(('0.0.0.0', port))  # Bind to all available interfaces
-    return sockfd
-
-# Receive and display frames
-
-
-def receive_and_show_frames(sockfd):
-    buffer_size = 65536  # The buffer size for the received data (adjust as needed)
-
-    while True:
-        # Receive data from the socket
-        data, addr = sockfd.recvfrom(buffer_size)
-
-        # Convert the received bytes into a numpy array (image)
-        image = np.frombuffer(data, dtype=np.uint8).reshape((480, 640, 3))  # Assuming 640x480 color images
-
-        if image.size > 0:
-            # Display the image using OpenCV
-            cv2.imshow("Received Image", image)
-
-# Main function to run the server
-
-
-def main():
-    port = 8080
-    sockfd = setup_udp_socket(port)
-    fourier_address = ('192.168.50.80', port)
-    receive_and_show_frames(sockfd)
-    sockfd.close()
-
-
-if __name__ == "__main__":
-    main()
+                cv2.imshow(window_name, image)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    print("[INFO] Quit.")
+                    break
+            cv2.destroyAllWindows()

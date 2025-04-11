@@ -11,12 +11,12 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
 
-
-using namespace std;
 std::mutex mutex;
 rs2::frameset fs_frame = {};
 double fs_timestamp = 0.0;
 bool fs_flag = false;
+
+
 
 
 
@@ -231,6 +231,68 @@ void l_get_intrinsics(const rs2::stream_profile& stream, float &_fx, float &_fy,
     }
 }
 
+#define COLOR_PORT      9001
+#define DEPTH_PORT      9002
+#define IRL_PORT        9003
+#define IRR_PORT        9004
+#define PDEPTH_PORT     9005
+
+bool enable_color_stream = true;
+bool enable_depth_stream = true;
+bool enable_ir_left_stream = true;
+bool enable_ir_right_stream = true;
+bool enable_post_depth_stream = true;
+
+struct StreamServer {
+    int port;
+    int sockfd;
+    int client_fd;
+    bool connected = false;
+    bool enable_sending = false;
+
+    StreamServer(int port_num) : port(port_num), sockfd(-1), client_fd(-1) {}
+};
+
+int create_socket_server(int port) {
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd == -1) {
+        std::cerr << "Failed to create socket on port " << port << std::endl;
+        return -1;
+    }
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    if (bind(sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        std::cerr << "Bind failed on port " << port << std::endl;
+        return -1;
+    }
+    listen(sockfd, 1);
+    return sockfd;
+}
+
+void wait_for_client(StreamServer& server) {
+    server.sockfd = create_socket_server(server.port);
+    if (server.sockfd == -1) return;
+
+    std::cout << "Waiting for client on port " << server.port << "...\n";
+    server.client_fd = accept(server.sockfd, NULL, NULL);
+    if (server.client_fd != -1) {
+        server.connected = true;
+        server.enable_sending = true;
+        std::cout << "Client connected on port " << server.port << "\n";
+    }
+}
+
+void send_image(int sockfd, const cv::Mat& image) {
+    std::vector<uchar> buf;
+    cv::imencode(".jpg", image, buf);
+    int size = buf.size();
+    send(sockfd, &size, sizeof(int), 0);
+    send(sockfd, buf.data(), size, 0);
+}
 
 
 int main()
@@ -245,6 +307,7 @@ int main()
         get_sensor_option(sensor);
     }
 
+    /*
     // Set sensor parameters
     for (rs2::sensor sensor : sensors){
         std::string sensor_name = sensor.get_info(RS2_CAMERA_INFO_NAME);
@@ -259,29 +322,29 @@ int main()
             // ...
         }
     }
-    
+    */
 
     // Instantiate pipeline and config
     rs2::pipeline pipe;
     rs2::config cfg;
 
     // Depth stream
-    cfg.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, 15);
+    if (enable_depth_stream || enable_post_depth_stream) cfg.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, 15);
     // Options: 640x480: @ 30 15 6 Hz
     // Options: 640x360: @ 30 Hz  
 
     // IR_left stream
-    cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 15);
+    if (enable_ir_left_stream) cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 15);
     // IR_right stream
-    cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 15);
+    if (enable_ir_right_stream)cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 15);
     // Options: 640x480: @ 30 15 6 Hz
     // Options: 640x360: @ 30 Hz    
 
     // RGB stream
-    cfg.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_BGR8, 15);
+    if (enable_color_stream)cfg.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_BGR8, 15);
     // Options:  640x480: @ 30 15 10 Hz
     // Options: 1280x720: @ 15 10 6  Hz    
-
+/*
     // IMU GYRO stream
     cfg.enable_stream(RS2_STREAM_GYRO , RS2_FORMAT_MOTION_XYZ32F, 200);
     // Options: 400 200 Hz
@@ -289,7 +352,7 @@ int main()
     // IMU ACCEL stream
     cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 200);
     // Options: 200 100 Hz
-
+*/
     rs2::pipeline_profile pipe_profile = pipe.start(cfg, stream_callback);
 
     // get Depth(IR_left) intrinsics
@@ -303,6 +366,19 @@ int main()
     temp_filter.set_option(rs2_option::RS2_OPTION_FILTER_SMOOTH_DELTA, 20);
 
     double _timestamp_last = 0.0;
+/// server
+    std::vector<StreamServer> stream_servers;
+
+    if (enable_color_stream) stream_servers.emplace_back(COLOR_PORT);
+    if (enable_depth_stream) stream_servers.emplace_back(DEPTH_PORT);
+    if (enable_ir_left_stream) stream_servers.emplace_back(IRL_PORT);
+    if (enable_ir_right_stream) stream_servers.emplace_back(IRR_PORT);
+    if (enable_post_depth_stream) stream_servers.emplace_back(PDEPTH_PORT);
+
+    for (auto& server : stream_servers) {
+        std::thread(wait_for_client, std::ref(server)).detach();
+    }
+///
     while (true){
         rs2::frameset _frame = {};
         double _timestamp = 0.0;
@@ -315,60 +391,54 @@ int main()
         lock.unlock();
 
         if(_flag){
-            printf("_frame fps:  %.4f \n", 1/(_timestamp - _timestamp_last));
-
-            // Obtain data for each image
-            rs2::depth_frame depth_frame = _frame.get_depth_frame();
-            rs2::video_frame color_frame = _frame.get_color_frame();
-            /*
-            rs2::frame irL_frame = _frame.get_infrared_frame(1);
-            rs2::frame irR_frame = _frame.get_infrared_frame(2);
-            */
-
-            rs2::depth_frame depth_frame_filtered = temp_filter.process(depth_frame);
-
-            // Convert image data to OpenCV format
-            cv::Mat depth_image(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP); // Depth
-            // Normalize depth image to the range 0-255 for display
-            cv::Mat depth_image_normalized;
-            cv::normalize(depth_image, depth_image_normalized, 0, 255, cv::NORM_MINMAX);
-
-            // Convert to 8-bit for OpenCV to display
-            cv::Mat depth_image_8bit;
-            depth_image_normalized.convertTo(depth_image_8bit, CV_8UC1);
-
-
-
-            cv::Mat color_image(cv::Size(640, 480), CV_8UC3, (void*)color_frame.get_data(), cv::Mat::AUTO_STEP); // RGB
-            /*
-            cv::Mat irL_image  (cv::Size(640, 480), CV_8UC1, (void*)irL_frame.get_data()  , cv::Mat::AUTO_STEP); // IR_left
-            cv::Mat irR_image  (cv::Size(640, 480), CV_8UC1, (void*)irR_frame.get_data()  , cv::Mat::AUTO_STEP); // IR_right
-
-            cv::Mat p_depth_image(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP); // post processed Depth
-            */
-            // show pictures
-            if (color_image.empty() || depth_image.empty()) {
-                std::cerr << "One or more images are empty." << std::endl;
-                continue;
+            for (size_t i = 0; i < stream_servers.size(); ++i) {
+                auto& server = stream_servers[i];
+                if (!server.enable_sending) continue;
+            
+                cv::Mat image;
+                switch (server.port) {
+                    case COLOR_PORT:
+                        if (!enable_color_stream) continue;
+                        rs2::video_frame color_frame = _frame.get_color_frame();
+                        image = cv::Mat color_image(cv::Size(640, 480), CV_8UC3, (void*)color_frame.get_data(), cv::Mat::AUTO_STEP);
+                        break;
+                    case DEPTH_PORT:
+                        if (!enable_depth_stream) continue;
+                        rs2::depth_frame depth_frame = _frame.get_depth_frame();
+                        image = cv::Mat depth_image(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP);
+                        break;
+                    case IRL_PORT:
+                        if (!enable_ir_left_stream) continue;
+                        rs2::frame irL_frame = _frame.get_infrared_frame(1);
+                        image = cv::Mat irL_image  (cv::Size(640, 480), CV_8UC1, (void*)irL_frame.get_data()  , cv::Mat::AUTO_STEP);
+                        break;
+                    case IRR_PORT:
+                        if (!enable_ir_right_stream) continue;
+                        rs2::frame irR_frame = _frame.get_infrared_frame(2);
+                        image = cv::Mat irL_image  (cv::Size(640, 480), CV_8UC1, (void*)irR_frame.get_data()  , cv::Mat::AUTO_STEP);
+                        break;
+                    case PDEPTH_PORT:
+                        if (!enable_post_depth_stream) continue;
+                        rs2::depth_frame depth_frame = _frame.get_depth_frame();
+                        rs2::depth_frame depth_frame_filtered = temp_filter.process(depth_frame);
+                        image = cv::Mat p_depth_image(cv::Size(640, 480), CV_16U , (void*)depth_frame_filtered.get_data(), cv::Mat::AUTO_STEP);
+                        break;
+                }
+                if (!image.empty()) {
+                    send_image(server.client_fd, image);
+                }
             }
-            cv::imshow("depth", depth_image);
-            cv::imshow("color", color_image);
-
-            // Show the depth image
-            cv::imshow("depth_normed", depth_image_8bit);
-
-            /*
-            cv::imshow("irL", irL_image);
-            cv::imshow("irR", irR_image);
-            cv::imshow("p_depth", depth_image);
-            */
-            cv::waitKey(10);
-
             _timestamp_last = _timestamp;
         }else{
             usleep(2000);
         }
+        key = cv::waitKey(1);
+        if (key == 'q' || key == 'Q') {
+            break;
+        }
 
     }
+    pipe.stop();
     return 0;
 }
+
