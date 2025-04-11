@@ -420,8 +420,8 @@ int main()
                         break;
                     case PDEPTH_PORT:
                         if (!enable_post_depth_stream) continue;
-                        rs2::depth_frame depth_frame = _frame.get_depth_frame();
-                        rs2::depth_frame depth_frame_filtered = temp_filter.process(depth_frame);
+                        rs2::depth_frame depth_frameF = _frame.get_depth_frame();
+                        rs2::depth_frame depth_frame_filtered = temp_filter.process(depth_frameF);
                         image = cv::Mat p_depth_image(cv::Size(640, 480), CV_16U , (void*)depth_frame_filtered.get_data(), cv::Mat::AUTO_STEP);
                         break;
                 }
