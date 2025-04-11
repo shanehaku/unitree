@@ -34,6 +34,7 @@ void stream_callback(const rs2::frame& frame){
     static double fs_last_timestamp = 0.0;
     static double gyro_last_timestamp = 0.0;
     static double accel_last_timestamp = 0.0;
+    std::cout << "[Callback triggered]\n";
 
     if(rs2::frameset c_frame = frame.as<rs2::frameset>()){
         // do not use
@@ -348,7 +349,7 @@ int main()
     cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 15);
     // Options: 640x480: @ 30 15 6 Hz
     // Options: 640x360: @ 30 Hz
-    
+
 	// IMU GYRO stream
 	cfg.enable_stream(RS2_STREAM_GYRO , RS2_FORMAT_MOTION_XYZ32F, 200);
 	// Options: 400 200 Hz
@@ -357,6 +358,7 @@ int main()
 	cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 200);
 	// Options: 200 100 Hz
 */
+    std::cout << "[Pipeline started with callback]\n";
     rs2::pipeline_profile pipe_profile = pipe.start(cfg, stream_callback);
 
     // get Depth(IR_left) intrinsics
