@@ -363,11 +363,11 @@ int main()
 ///
 
     int key;
-    rs2::video_frame color_frame;
-    rs2::depth_frame depth_frame;
-    rs2::depth_frame depth_frame_filtered;
-    rs2::frame irL_frame;
-    rs2::frame irR_frame;
+    rs2::video_frame color_frame = {};
+    rs2::depth_frame depth_frame = {};
+    rs2::depth_frame depth_frame_filtered = {};
+    rs2::frame irL_frame = {};
+    rs2::frame irR_frame = {};
 
     while (true){
         rs2::frameset _frame = {};
