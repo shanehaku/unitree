@@ -357,7 +357,11 @@ int main()
         	usleep(2000);
         	//printf("frame stuck\n");
     	}
-
+        
+        key = cv::waitKey(1);
+        if (key == 'q' || key == 'Q') {
+            break;
+        }
 	}
 	return 0;
 }

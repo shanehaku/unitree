@@ -312,7 +312,20 @@ int main()
     for (rs2::sensor sensor : sensors){
         get_sensor_option(sensor);
     }
-
+    
+    for (rs2::sensor sensor : sensors){
+    	std::string sensor_name = sensor.get_info(RS2_CAMERA_INFO_NAME);
+    	if(sensor_name == "Stereo Module"){ // Depth camera
+        	change_sensor_option(sensor, RS2_OPTION_VISUAL_PRESET, rs2_rs400_visual_preset::RS2_RS400_VISUAL_PRESET_HIGH_ACCURACY);
+        	change_sensor_option(sensor, RS2_OPTION_ENABLE_AUTO_EXPOSURE, 1);
+        	change_sensor_option(sensor, RS2_OPTION_EMITTER_ENABLED, 1);
+        	change_sensor_option(sensor, RS2_OPTION_LASER_POWER, 100);
+    	}else if(sensor_name == "RGB Module"){
+        	change_sensor_option(sensor, RS2_OPTION_ENABLE_AUTO_EXPOSURE, 1);
+    	}else if(sensor_name == "Motion Module"){
+        	// ...
+    	}
+	}
 
     // Instantiate pipeline and config
     rs2::pipeline pipe;
@@ -322,14 +335,14 @@ int main()
     cfg.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, 15);
     // Options: 640x480: @ 30 15 6 Hz
     // Options: 640x360: @ 30 Hz  
-
+/*
     // IR_left stream
     cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 15);
     // IR_right stream
     cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 15);
     // Options: 640x480: @ 30 15 6 Hz
     // Options: 640x360: @ 30 Hz    
-
+*/
     // RGB stream
     cfg.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_BGR8, 15);
     // Options:  640x480: @ 30 15 10 Hz
@@ -380,9 +393,10 @@ int main()
             rs2::video_frame color_frame = _frame.get_color_frame();
             rs2::depth_frame depth_frame = _frame.get_depth_frame();
             rs2::depth_frame depth_frame_filtered = temp_filter.process(depth_frame);
+            /*
             rs2::frame irL_frame = _frame.get_infrared_frame(1);
             rs2::frame irR_frame = _frame.get_infrared_frame(2);
-
+            */
             
             for (size_t i = 0; i < stream_servers.size(); ++i) {
                 auto& server = stream_servers[i];
@@ -393,11 +407,13 @@ int main()
                     case COLOR_PORT:
                         if (!enable_color_stream) continue;
                         image = cv::Mat(cv::Size(640, 480), CV_8UC3, (void*)color_frame.get_data(), cv::Mat::AUTO_STEP);
+                        cv::imshow("color", image);
                         break;
                     case DEPTH_PORT:
                         if (!enable_depth_stream) continue;
                         image = cv::Mat(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP);
-                        break;
+                        cv::imshow("depth", color_image);
+                        break;/*
                     case IRL_PORT:
                         if (!enable_ir_left_stream) continue;
                         image = cv::Mat(cv::Size(640, 480), CV_8UC1, (void*)irL_frame.get_data()  , cv::Mat::AUTO_STEP);
@@ -405,7 +421,7 @@ int main()
                     case IRR_PORT:
                         if (!enable_ir_right_stream) continue;
                         image = cv::Mat(cv::Size(640, 480), CV_8UC1, (void*)irR_frame.get_data()  , cv::Mat::AUTO_STEP);
-                        break;
+                        break;*/
                     case PDEPTH_PORT:
                         if (!enable_post_depth_stream) continue;
                         image = cv::Mat(cv::Size(640, 480), CV_16U , (void*)depth_frame_filtered.get_data(), cv::Mat::AUTO_STEP);
