@@ -1,1 +1,22 @@
+about sender:
+    compile:
 g++ camera_Socket_test.cpp -o testSocket `pkg-config --cflags --libs opencv4` -lrealsense2 -pthread
+    run:
+    server Ver.:
+    ./sender_Server
+    client Ver.:
+    ./sender_client serverIP
+
+about receiver:
+    run:
+    server Ver.:
+    ./receiver_Server.py
+    client Ver:
+    ./receiver_Client.py serverIP WindowNmae(abitrary) Port
+
+Port:
+    "Color": 9001
+    "Depth": 9002
+    "IR_Left": 9003
+    "IR_Right": 9004
+    "Post_Depth": 9005

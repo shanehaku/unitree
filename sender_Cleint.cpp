@@ -312,7 +312,7 @@ void send_image(int sockfd, const cv::Mat& image) {
 int main(int argc, char* argv[])
 {    
 
-    std::string target_ip = "192.168.50.112/24";
+    std::string target_ip = "192.168.50.112";
     if (argc > 1) {
         target_ip = argv[1];
     }
