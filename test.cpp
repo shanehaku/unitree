@@ -26,10 +26,6 @@ rs2::frameset fs_frame = {};
 double fs_timestamp = 0.0;
 bool fs_flag = false;
 
-
-
-
-
 void stream_callback(const rs2::frame& frame){ 
     static double fs_last_timestamp = 0.0;
     static double gyro_last_timestamp = 0.0;
@@ -96,7 +92,6 @@ void stream_callback(const rs2::frame& frame){
 }
 
 
-
 rs2::device get_a_realsense_device()
 {
     // Instantiate context
@@ -129,7 +124,6 @@ rs2::device get_a_realsense_device()
     // At this point, selected_device represents our current device and returns it
     return selected_device;
 }
-
 
 
 void  get_sensor_option(const rs2::sensor& sensor)
@@ -177,7 +171,6 @@ void  get_sensor_option(const rs2::sensor& sensor)
 }
 
 
-
 void change_sensor_option(const rs2::sensor& sensor, rs2_option option_type, float requested_value)
 {
     // Firstly, determine whether the sensor supports this option setting
@@ -194,7 +187,6 @@ void change_sensor_option(const rs2::sensor& sensor, rs2_option option_type, flo
     }
 
 }
-
 
 
 void l_get_intrinsics(const rs2::stream_profile& stream, float &_fx, float &_fy, float &_cx, float &_cy)
@@ -243,22 +235,22 @@ void l_get_intrinsics(const rs2::stream_profile& stream, float &_fx, float &_fy,
 }
 
 
-
 bool enable_color_stream = true;
 bool enable_depth_stream = true;
 bool enable_ir_left_stream = false;
 bool enable_ir_right_stream = false;
 bool enable_post_depth_stream = false;
 
-struct StreamServer {
+struct StreamClient {
     int port;
     int sockfd;
-    int client_fd;
+    std::string host_ip;
     bool connected = false;
     bool enable_sending = false;
 
-    StreamServer(int port_num) : port(port_num), sockfd(-1), client_fd(-1) {}
+    StreamClient(int port_num, const std::string& ip) : port(port_num), sockfd(-1), host_ip(ip) {}
 };
+
 
 int create_socket_server(int port) {
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -280,18 +272,32 @@ int create_socket_server(int port) {
     return sockfd;
 }
 
-void wait_for_client(StreamServer& server) {
-    server.sockfd = create_socket_server(server.port);
-    if (server.sockfd == -1) return;
+void connect_to_server(StreamClient& client) {
+    client.sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (client.sockfd == -1) {
+        std::cerr << "Failed to create socket for port " << client.port << std::endl;
+        return;
+    }
 
-    std::cout << "Waiting for client on port " << server.port << "...\n";
-    server.client_fd = accept(server.sockfd, NULL, NULL);
-    if (server.client_fd != -1) {
-        server.connected = true;
-        server.enable_sending = true;
-        std::cout << "Client connected on port " << server.port << "\n";
+    sockaddr_in serv_addr{};
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(client.port);
+
+    if (inet_pton(AF_INET, client.host_ip.c_str(), &serv_addr.sin_addr) <= 0) {
+        std::cerr << "Invalid address: " << client.host_ip << std::endl;
+        return;
+    }
+
+    std::cout << "Connecting to " << client.host_ip << ":" << client.port << "...\n";
+    if (connect(client.sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == 0) {
+        client.connected = true;
+        client.enable_sending = true;
+        std::cout << "Connected to " << client.host_ip << ":" << client.port << "\n";
+    } else {
+        std::cerr << "Connection failed on port " << client.port << "\n";
     }
 }
+
 
 void send_image(int sockfd, const cv::Mat& image) {
     std::vector<uchar> buf;
@@ -302,8 +308,15 @@ void send_image(int sockfd, const cv::Mat& image) {
 }
 
 
-int main()
+int main(int argc, char* argv[])
 {    
+
+    std::string target_ip = "192.168.50.112/24";
+    if (argc > 1) {
+        target_ip = argv[1];
+    }
+
+
     rs2::device selected_device;
     selected_device = get_a_realsense_device();
 
@@ -373,16 +386,16 @@ int main()
 
     double _timestamp_last = 0.0;
 /// server
-    std::vector<StreamServer> stream_servers;
+    std::vector<StreamClient> stream_clients;
 
-    if (enable_color_stream) stream_servers.emplace_back(COLOR_PORT);
-    if (enable_depth_stream) stream_servers.emplace_back(DEPTH_PORT);
-    if (enable_ir_left_stream) stream_servers.emplace_back(IRL_PORT);
-    if (enable_ir_right_stream) stream_servers.emplace_back(IRR_PORT);
-    if (enable_post_depth_stream) stream_servers.emplace_back(PDEPTH_PORT);
+    if (enable_color_stream) stream_clients.emplace_back(COLOR_PORT, target_ip);
+    if (enable_depth_stream) stream_clients.emplace_back(DEPTH_PORT, target_ip);
+    if (enable_ir_left_stream) stream_clients.emplace_back(IRL_PORT, target_ip);
+    if (enable_ir_right_stream) stream_clients.emplace_back(IRR_PORT, target_ip);
+    if (enable_post_depth_stream) stream_clients.emplace_back(PDEPTH_PORT, target_ip);
 
-    for (auto& server : stream_servers) {
-        std::thread(wait_for_client, std::ref(server)).detach();
+    for (auto& client : stream_clients) {
+        std::thread(connect_to_server, std::ref(client)).detach();
     }
 ///
 
@@ -400,48 +413,48 @@ int main()
     	lock.unlock();
 
         if(_flag){
-            // cv::Mat image;
-            // rs2::video_frame color_frame = _frame.get_color_frame();
-            // rs2::depth_frame depth_frame = _frame.get_depth_frame();
-            // rs2::depth_frame depth_frame_filtered = temp_filter.process(depth_frame);
-            // /*
-            // rs2::frame irL_frame = _frame.get_infrared_frame(1);
-            // rs2::frame irR_frame = _frame.get_infrared_frame(2);
-            // */
+            cv::Mat image;
+            rs2::video_frame color_frame = _frame.get_color_frame();
+            rs2::depth_frame depth_frame = _frame.get_depth_frame();
+            rs2::depth_frame depth_frame_filtered = temp_filter.process(depth_frame);
+            /*
+            rs2::frame irL_frame = _frame.get_infrared_frame(1);
+            rs2::frame irR_frame = _frame.get_infrared_frame(2);
+            */
             
-            // for (size_t i = 0; i < stream_servers.size(); ++i) {
-            //     auto& server = stream_servers[i];
-            //     if (!server.enable_sending) continue;
+            for (size_t i = 0; i < stream_clients.size(); ++i) {
+                auto& client = stream_clients[i];
+                if (!client.enable_sending) continue;
             
                 
-            //     switch (server.port) {
-            //         case COLOR_PORT:
-            //             if (!enable_color_stream) continue;
-            //             image = cv::Mat(cv::Size(640, 480), CV_8UC3, (void*)color_frame.get_data(), cv::Mat::AUTO_STEP);
-            //             cv::imshow("color", image);
-            //             break;
-            //         case DEPTH_PORT:
-            //             if (!enable_depth_stream) continue;
-            //             image = cv::Mat(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP);
-            //             cv::imshow("depth", image);
-            //             break;/*
-            //         case IRL_PORT:
-            //             if (!enable_ir_left_stream) continue;
-            //             image = cv::Mat(cv::Size(640, 480), CV_8UC1, (void*)irL_frame.get_data()  , cv::Mat::AUTO_STEP);
-            //             break;
-            //         case IRR_PORT:
-            //             if (!enable_ir_right_stream) continue;
-            //             image = cv::Mat(cv::Size(640, 480), CV_8UC1, (void*)irR_frame.get_data()  , cv::Mat::AUTO_STEP);
-            //             break;*/
-            //         case PDEPTH_PORT:
-            //             if (!enable_post_depth_stream) continue;
-            //             image = cv::Mat(cv::Size(640, 480), CV_16U , (void*)depth_frame_filtered.get_data(), cv::Mat::AUTO_STEP);
-            //             break;
-            //     }
-            //     if (!image.empty()) {
-            //         send_image(server.client_fd, image);
-            //     }
-            // }
+                switch (client.port) {
+                    case COLOR_PORT:
+                        if (!enable_color_stream) continue;
+                        image = cv::Mat(cv::Size(640, 480), CV_8UC3, (void*)color_frame.get_data(), cv::Mat::AUTO_STEP);
+                        cv::imshow("color", image);
+                        break;
+                    case DEPTH_PORT:
+                        if (!enable_depth_stream) continue;
+                        image = cv::Mat(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP);
+                        cv::imshow("depth", image);
+                        break;/*
+                    case IRL_PORT:
+                        if (!enable_ir_left_stream) continue;
+                        image = cv::Mat(cv::Size(640, 480), CV_8UC1, (void*)irL_frame.get_data()  , cv::Mat::AUTO_STEP);
+                        break;
+                    case IRR_PORT:
+                        if (!enable_ir_right_stream) continue;
+                        image = cv::Mat(cv::Size(640, 480), CV_8UC1, (void*)irR_frame.get_data()  , cv::Mat::AUTO_STEP);
+                        break;*/
+                    case PDEPTH_PORT:
+                        if (!enable_post_depth_stream) continue;
+                        image = cv::Mat(cv::Size(640, 480), CV_16U , (void*)depth_frame_filtered.get_data(), cv::Mat::AUTO_STEP);
+                        break;
+                }
+                if (!image.empty()) {
+                    send_image(client.sockfd, image);
+                }
+            }
             _timestamp_last = _timestamp;
         }else{
             usleep(2000);
