@@ -302,8 +302,9 @@ void connect_to_server(StreamClient& client) {
 void send_image(int sockfd, const cv::Mat& image) {
     std::vector<uchar> buf;
     cv::imencode(".jpg", image, buf);
-    int size = buf.size();
-    send(sockfd, &size, sizeof(size), 0);
+    int32_t size = buf.size();
+    int32_t size_network = htonl(size);  // host to network byte order (big-endian)
+    send(sockfd, &size_network, sizeof(size_network), 0);
     send(sockfd, buf.data(), size, 0);
 }
 
