@@ -451,7 +451,7 @@ int main()
                         break;
                 }
                 if (!image.empty()) {
-                    send_image(server.sockfd, image);
+                    send_image(server.client_sock, image);
                 }
             }
             _timestamp_last = _timestamp;
