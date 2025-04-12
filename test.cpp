@@ -303,7 +303,7 @@ void send_image(int sockfd, const cv::Mat& image) {
     std::vector<uchar> buf;
     cv::imencode(".jpg", image, buf);
     int size = buf.size();
-    send(sockfd, &size, sizeof(int), 0);
+    send(sockfd, &size, sizeof(size), 0);
     send(sockfd, buf.data(), size, 0);
 }
 
