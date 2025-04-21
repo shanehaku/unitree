@@ -247,7 +247,7 @@ void l_get_intrinsics(const rs2::stream_profile& stream, float &_fx, float &_fy,
 
 std::vector<StreamConfig> stream_configs = {
     // Depth stream
-    {RS2_STREAM_DEPTH, 0, 640, 480, RS2_FORMAT_Z16, 6, CV_16U, "depth", true, true, "Depth.mp4"},
+    {RS2_STREAM_DEPTH, 0, 1280, 720, RS2_FORMAT_Z16, 6, CV_16U, "depth", true, true, "Depth.mp4"},
     
     // Color stream
     {RS2_STREAM_COLOR, 0, 1920, 1080, RS2_FORMAT_BGR8, 8, CV_8UC3, "color", true, true, "RGB.mp4"},
@@ -272,7 +272,8 @@ int main()
 			video_writers[cfg_item.window_name] = cv::VideoWriter(
 				cfg_item.video_filename, fourcc, cfg_item.fps, 
 				cv::Size(cfg_item.width, cfg_item.height), 
-				(cfg_item.cv_type == CV_8UC3)); // 判斷是否為彩色
+				true);
+				//(cfg_item.cv_type == CV_8UC3)); // 判斷是否為彩色
 			if (!video_writers[cfg_item.window_name].isOpened())
 				std::cerr << "無法開啟影片檔案：" << cfg_item.video_filename << std::endl;
 		}
@@ -358,7 +359,7 @@ int main()
 			
 				cv::Mat image(cv::Size(cfg_item.width, cfg_item.height), cfg_item.cv_type, (void*)frame.get_data(), cv::Mat::AUTO_STEP);
 			
-				if (!image.empty())
+				if (!image.empty()){
 					cv::imshow(cfg_item.window_name, image);
 					// 儲存影片
 					if (cfg_item.save_video && video_writers.count(cfg_item.window_name)) {
@@ -381,8 +382,8 @@ int main()
 
 						video_writers[cfg_item.window_name].write(output_frame);
 					}
-				else
-					std::cerr << "Empty image for stream: " << cfg_item.window_name << std::endl;
+				}
+				else std::cerr << "Empty image for stream: " << cfg_item.window_name << std::endl;
 			}
     	}else{
         	usleep(2000);
