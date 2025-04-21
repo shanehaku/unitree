@@ -247,7 +247,7 @@ void l_get_intrinsics(const rs2::stream_profile& stream, float &_fx, float &_fy,
 
 std::vector<StreamConfig> stream_configs = {
     // Depth stream
-    {RS2_STREAM_DEPTH, 0, 640, 480, RS2_FORMAT_Z16, 6, CV_16U, "depth", true, false, "Depth.mp4"},
+    {RS2_STREAM_DEPTH, 0, 640, 480, RS2_FORMAT_Z16, 6, CV_16U, "depth", true, true, "Depth.mp4"},
     
     // Color stream
     {RS2_STREAM_COLOR, 0, 1920, 1080, RS2_FORMAT_BGR8, 8, CV_8UC3, "color", true, true, "RGB.mp4"},
@@ -364,15 +364,24 @@ int main()
 					if (cfg_item.save_video && video_writers.count(cfg_item.window_name)) {
 						cv::Mat output_frame;
 
-						if (cfg_item.cv_type == CV_16U) {
-							image.convertTo(output_frame, CV_8UC1, 255.0 / 10000);
+						if (cfg_item.cv_type == CV_16U || image.channels() == 1) {
+							if (cfg_item.cv_type == CV_16U) {
+								image.convertTo(output_frame, CV_8UC1, 255.0 / 10000);
+							} else {
+								output_frame = image;
+							}
+							
+							cv::Mat pseudocolor;
+							cv::applyColorMap(output_frame, pseudocolor, cv::COLORMAP_JET);
+				
+							output_frame = pseudocolor;
 						} else {
 							output_frame = image;
 						}
 
 						video_writers[cfg_item.window_name].write(output_frame);
 					}
-								else
+				else
 					std::cerr << "Empty image for stream: " << cfg_item.window_name << std::endl;
 			}
     	}else{
