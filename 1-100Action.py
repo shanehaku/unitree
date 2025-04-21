@@ -8,7 +8,7 @@ def is_valid_action(action):
     return False
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-server_address1 = ("192.168.12.1", 8888)
+server_address1 = ("192.168.50.80", 8001)
 
 while True:
     action = input("请输入要发送的动作（1-100之间的数字）：")

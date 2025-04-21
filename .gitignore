@@ -2,3 +2,5 @@ gr1Teaching-relase-2.1.1.zip
 gr1Teaching-relase-2.1.1
 *.toml
 1-100Action.py
+test*
+/Lidar_livox

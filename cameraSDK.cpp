@@ -18,6 +18,18 @@ rs2::frameset fs_frame = {};
 double fs_timestamp = 0.0;
 bool fs_flag = false;
 
+struct StreamConfig {
+    rs2_stream stream_type;
+    int stream_index;
+    int width;
+    int height;
+    rs2_format format;
+    int fps;
+    int cv_type;
+    std::string window_name;
+    bool enabled;
+};
+
 
 
 void stream_callback(const rs2::frame& frame){
@@ -231,7 +243,22 @@ void l_get_intrinsics(const rs2::stream_profile& stream, float &_fx, float &_fy,
 	}
 }
 
+std::vector<StreamConfig> stream_configs = {
+    // Depth stream
+    {RS2_STREAM_DEPTH, 0, 640, 480, RS2_FORMAT_Z16, 15, CV_16U, "depth", true},
+    
+    // Color stream
+    {RS2_STREAM_COLOR, 0, 640, 480, RS2_FORMAT_BGR8, 15, CV_8UC3, "color", true},
+    
+    // IR left
+    {RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 15, CV_8UC1, "irL", false},
 
+    // IR right
+    {RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 15, CV_8UC1, "irR", false},
+
+    // Post-processed depth (reuse original depth frame, same cv_type)
+    {RS2_STREAM_DEPTH, 0, 640, 480, RS2_FORMAT_Z16, 15, CV_16U, "p_depth", false}
+};
 
 int main()
 {    
@@ -265,32 +292,12 @@ int main()
 	rs2::pipeline pipe;
 	rs2::config cfg;
     
-	// Depth stream
-	cfg.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, 15);
-	// Options: 640x480: @ 30 15 6 Hz
-	// Options: 640x360: @ 30 Hz  
+	for (const auto& cfg_item : stream_configs){
+		if(cfg_item.enabled){
+			cfg.enable_stream(cfg_item.stream_type, cfg_item.stream_index, cfg_item.width, cfg_item.height, cfg_item.format, cfg_item.fps);
+		}
+	}
 
-    // RGB stream
-	cfg.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_BGR8, 15);
-	// Options:  640x480: @ 30 15 10 Hz
-	// Options: 1280x720: @ 15 10 6  Hz  
-
-/*
-	// IR_left stream
-	cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 15);
-	// IR_right stream
-	cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 15);
-	// Options: 640x480: @ 30 15 6 Hz
-	// Options: 640x360: @ 30 Hz    
-    
-	// IMU GYRO stream
-	cfg.enable_stream(RS2_STREAM_GYRO , RS2_FORMAT_MOTION_XYZ32F, 200);
-	// Options: 400 200 Hz
-
-	// IMU ACCEL stream
-	cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 200);
-	// Options: 200 100 Hz
-*/
 	rs2::pipeline_profile pipe_profile = pipe.start(cfg, stream_callback);
 
 	// get Depth(IR_left) intrinsics
@@ -305,7 +312,7 @@ int main()
 	temp_filter.set_option(rs2_option::RS2_OPTION_FILTER_SMOOTH_DELTA, 20);
 
 	double _timestamp_last = 0.0;
-    
+    int key;
 	while (true){
     	rs2::frameset _frame = {};
     	double _timestamp = 0.0;
@@ -316,44 +323,30 @@ int main()
     	_flag = fs_flag;
     	fs_flag = false;
     	lock.unlock();
-        int key;
+        
     	if(_flag){
-        	printf("_frame fps:  %.4f \n", 1/(_timestamp - _timestamp_last));
-    	 
-        	// Obtain data for each image
-        	rs2::depth_frame depth_frame = _frame.get_depth_frame();
-        	rs2::video_frame color_frame = _frame.get_color_frame();
-        	/*
-        	rs2::frame irL_frame = _frame.get_infrared_frame(1);
-        	rs2::frame irR_frame = _frame.get_infrared_frame(2);
-    	*/
-
-        	rs2::depth_frame depth_frame_filtered = temp_filter.process(depth_frame);
-
-        	// Convert image data to OpenCV format
-        	cv::Mat depth_image(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP); // Depth
-        	cv::Mat color_image(cv::Size(640, 480), CV_8UC3, (void*)color_frame.get_data(), cv::Mat::AUTO_STEP); // RGB
-        	/*
-        	cv::Mat irL_image  (cv::Size(640, 480), CV_8UC1, (void*)irL_frame.get_data()  , cv::Mat::AUTO_STEP); // IR_left
-        	cv::Mat irR_image  (cv::Size(640, 480), CV_8UC1, (void*)irR_frame.get_data()  , cv::Mat::AUTO_STEP); // IR_right
-
-        	cv::Mat p_depth_image(cv::Size(640, 480), CV_16U , (void*)depth_frame.get_data(), cv::Mat::AUTO_STEP); // post processed Depth
-        	*/
-        	// show pictures
-        	if (color_image.empty() || depth_image.empty()) {
-            	std::cerr << "One or more images are empty." << std::endl;
-            	continue;
-        	}
-        	cv::imshow("depth", depth_image);
-        	cv::imshow("color", color_image);
-        	/*
-        	cv::imshow("irL", irL_image);
-        	cv::imshow("irR", irR_image);*/
-        	cv::imshow("p_depth", depth_image);
-       	 
-        	cv::waitKey(1);
-
-        	_timestamp_last = _timestamp;
+			for (const auto& cfg_item : stream_configs){
+				if (!cfg_item.enabled) continue;
+			
+				rs2::frame frame;
+				if (cfg_item.stream_type == RS2_STREAM_COLOR)
+					frame = _frame.get_color_frame();
+				else if (cfg_item.stream_type == RS2_STREAM_DEPTH)
+					frame = (cfg_item.window_name == "p_depth") ? temp_filter.process(_frame.get_depth_frame()) : _frame.get_depth_frame();
+				else if (cfg_item.stream_type == RS2_STREAM_INFRARED)
+					frame = _frame.get_infrared_frame(cfg_item.stream_index);
+				else
+					continue; // Skip unsupported for now
+			
+				if (!frame) continue;
+			
+				cv::Mat image(cv::Size(cfg_item.width, cfg_item.height), cfg_item.cv_type, (void*)frame.get_data(), cv::Mat::AUTO_STEP);
+			
+				if (!image.empty())
+					cv::imshow(cfg_item.window_name, image);
+				else
+					std::cerr << "Empty image for stream: " << cfg_item.window_name << std::endl;
+			}
     	}else{
         	usleep(2000);
         	//printf("frame stuck\n");
