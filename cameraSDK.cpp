@@ -28,6 +28,8 @@ struct StreamConfig {
     int cv_type;
     std::string window_name;
     bool enabled;
+    bool save_video;                 // 是否儲存影片
+    std::string video_filename;      // 儲存的檔名
 };
 
 
@@ -245,23 +247,37 @@ void l_get_intrinsics(const rs2::stream_profile& stream, float &_fx, float &_fy,
 
 std::vector<StreamConfig> stream_configs = {
     // Depth stream
-    {RS2_STREAM_DEPTH, 0, 640, 480, RS2_FORMAT_Z16, 15, CV_16U, "depth", true},
+    {RS2_STREAM_DEPTH, 0, 640, 480, RS2_FORMAT_Z16, 6, CV_16U, "depth", true, false, "Depth.mp4"},
     
     // Color stream
-    {RS2_STREAM_COLOR, 0, 640, 480, RS2_FORMAT_BGR8, 15, CV_8UC3, "color", true},
+    {RS2_STREAM_COLOR, 0, 1920, 1080, RS2_FORMAT_BGR8, 8, CV_8UC3, "color", true, true, "RGB.mp4"},
     
     // IR left
-    {RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 15, CV_8UC1, "irL", false},
+    {RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 6, CV_8UC1, "irL", false, false, "InfaredL.mp4"},
 
     // IR right
-    {RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 15, CV_8UC1, "irR", false},
+    {RS2_STREAM_INFRARED, 2, 640, 480, RS2_FORMAT_Y8, 6, CV_8UC1, "irR", false, false, "InfaredR.mp4"},
 
     // Post-processed depth (reuse original depth frame, same cv_type)
-    {RS2_STREAM_DEPTH, 0, 640, 480, RS2_FORMAT_Z16, 15, CV_16U, "p_depth", false}
+    {RS2_STREAM_DEPTH, 0, 640, 480, RS2_FORMAT_Z16, 6, CV_16U, "p_depth", false, false, "Depth_processed.mp4" }
 };
 
 int main()
 {    
+	std::map<std::string, cv::VideoWriter> video_writers;
+
+	for (const auto& cfg_item : stream_configs){
+		if (cfg_item.enabled && cfg_item.save_video){
+			int fourcc = cv::VideoWriter::fourcc('a', 'v', 'c', '1');  // 可改為 'X','V','I','D' 或 'a','v','c','1'
+			video_writers[cfg_item.window_name] = cv::VideoWriter(
+				cfg_item.video_filename, fourcc, cfg_item.fps, 
+				cv::Size(cfg_item.width, cfg_item.height), 
+				(cfg_item.cv_type == CV_8UC3)); // 判斷是否為彩色
+			if (!video_writers[cfg_item.window_name].isOpened())
+				std::cerr << "無法開啟影片檔案：" << cfg_item.video_filename << std::endl;
+		}
+	}
+	
 	rs2::device selected_device;
 	selected_device = get_a_realsense_device();
 
@@ -344,7 +360,19 @@ int main()
 			
 				if (!image.empty())
 					cv::imshow(cfg_item.window_name, image);
-				else
+					// 儲存影片
+					if (cfg_item.save_video && video_writers.count(cfg_item.window_name)) {
+						cv::Mat output_frame;
+
+						if (cfg_item.cv_type == CV_16U) {
+							image.convertTo(output_frame, CV_8UC1, 255.0 / 10000);
+						} else {
+							output_frame = image;
+						}
+
+						video_writers[cfg_item.window_name].write(output_frame);
+					}
+								else
 					std::cerr << "Empty image for stream: " << cfg_item.window_name << std::endl;
 			}
     	}else{
